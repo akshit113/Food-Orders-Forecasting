@@ -29,6 +29,11 @@ def perform_eda(train_df, test_df):
     print((set(train_df['City_Zip_Code'].values)))
     print((set(test_df['City_Zip_Code'].values)))
     print('There are 8 distinct zipcodes. Need to replace 0 with a dummy zipcode, 123')
+    print('=====================================================================')
+
+    print('now checking Operational_Region_Coverage_Area')
+    print(train_df.isnull().sum())
+    print(train_df.isin([0]).sum())
 
     return
 
