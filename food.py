@@ -1,4 +1,18 @@
-from pandas import read_csv
+import numpy as np
+from pandas import read_csv, get_dummies, DataFrame
+from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, root_mean_squared_error
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+import time
+
+cat_cols = ['Period_No', 'Facility_No', 'Facility_Category', 'City_Zip_Code', 'Operational_Region_Coverage_Area',
+            'Custom_Promoted', 'Promoted', 'Search_Promotions',
+            'Course', 'Flavour_Profile']
+
+num_cols = ['Billing_Amount', 'Labelled_Price']
 
 
 def load_data():
@@ -13,49 +27,22 @@ def load_data():
 
 
 def perform_eda(train_df, test_df):
-    """EDA Results:
-    1. Categorical Columns:
-        Facility_Category - c1,c2,c3
+    for col_name in cat_cols:
+        print(f'now checking ----> {col_name}')
+        print(f'{len(set(train_df[col_name].values))}')
+        print(f'{len(set(test_df[col_name].values))}')
+        print('=====================================================================')
 
+    print(list(train_df.columns))
+    print(list(test_df.columns))
 
+    train_df[cat_cols] = train_df[cat_cols].astype('category')
+    test_df[cat_cols] = test_df[cat_cols].astype('category')
+    print(train_df.dtypes)
+    print(test_df.dtypes)
 
-    """
-    print('getting unique facility category..')
-    print(set(train_df['Facility_Category'].values))
-    print(set(test_df['Facility_Category'].values))
-    print('=====================================================================')
-
-    print('now checking ---->zip code info..')
-    print((set(train_df['City_Zip_Code'].values)))
-    print((set(test_df['City_Zip_Code'].values)))
-    print('There are 8 distinct zipcodes. Need to replace 0 with a dummy zipcode, 123')
-    print('=====================================================================')
-
-    print('now checking ----> Operational_Region_Coverage_Area')
-    print(train_df.isnull().sum())
-    print(train_df.isin([0]).sum())
-    print(len(set(train_df['Operational_Region_Coverage_Area'].values)))
-    print(len(set(test_df['Operational_Region_Coverage_Area'].values)))
-    print('There are 28 distinct values in Operational_Region_Coverage_Area --> no nulls, zeros found')
-    print('=====================================================================')
-
-    print('now checking ----> Custom Promoted')
-    print((set(train_df['Custom_Promoted'].values)))
-    print((set(test_df['Custom_Promoted'].values)))
-    print("This is a categorical column with 0s and 1s")
-    print('=====================================================================')
-
-    print('now checking ---->Promoted')
-    print((set(train_df['Promoted'].values)))
-    print((set(test_df['Promoted'].values)))
-    print("This is a categorical column with 0s and 1s")
-    print('=====================================================================')
-
-    print('now checking ----> Custom Promoted')
-    print((set(train_df['Search_Promotions'].values)))
-    print((set(test_df['Search_Promotions'].values)))
-    print("This is a categorical column with 0s and 1s")
-    print('=====================================================================')
+    train_df_encoded = get_dummies(train_df, columns=cat_cols, prefix='category', drop_first=True)
+    test_df_encoded = get_dummies(test_df, columns=cat_cols, prefix='category', drop_first=True)
 
     return
 
@@ -65,7 +52,47 @@ def clean_data(train_df, test_df):
 
 
 if __name__ == '__main__':
-    train_df, test_df = load_data()
-    perform_eda(train_df, test_df)
+    tic = time.perf_counter()
+    data, pred_df = load_data()
+    # perform_eda(data, pred_df)
 
+    sampled_data = data.sample(frac=0.4, random_state=42)
+    X = sampled_data.drop(columns=['Orders_Count'])
+    y = sampled_data['Orders_Count']
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', StandardScaler(), num_cols),  # Scale numerical features
+            ('cat', OneHotEncoder(handle_unknown='ignore'), cat_cols)  # Encode categorical features
+        ]
+    )
+
+    # Define the pipeline
+    pipeline = Pipeline(steps=[
+        ('preprocessor', preprocessor),  # Preprocessing step
+        ('model', RandomForestRegressor(n_estimators=100, random_state=42))  # Model step
+    ], verbose=True)
+
+    # Train the pipeline
+    pipeline.fit(X_train, y_train)
+
+    # Predict on the validation set
+    y_val = np.floor(pipeline.predict(X_test))
+    # Evaluate the model
+    mae = mean_absolute_error(y_test, y_val)
+    rmse = root_mean_squared_error(y_test, y_val)
+    print(f"Mean Absolute Error: {mae}")
+    print(f"Root Mean Squared Error: {rmse}")
+
+
+    ###
+
+    y_pred = np.round(pipeline.predict(pred_df),0)
+    df = DataFrame(y_pred, columns=['Orders_Count'])
+    df.to_csv('Submission.csv', index=False)
+
+    toc = time.perf_counter()
+
+    print(f"Time: {toc - tic:0.4f} seconds")
     print('Program Execution Complete...')
